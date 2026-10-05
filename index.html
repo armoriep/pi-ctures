@@ -1,0 +1,1548 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover">
+    
+    <!-- Paint browser Chrome and UI to match app background (#FDFBF7) -->
+    <meta name="theme-color" content="#FDFBF7">
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#FDFBF7">
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#FDFBF7">
+    <meta name="msapplication-navbutton-color" content="#FDFBF7">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="color-scheme" content="light">
+    
+    <title>Pi-ctures</title>
+    <meta name="description" content="Processador fotográfico minimalista com visual iPhone, Smart HDR, WebGL2 e upscale Lanczos até 4x.">
+    <meta property="og:title" content="Pi-ctures">
+    <meta property="og:description" content="Processador fotográfico minimalista com visual iPhone, Smart HDR, WebGL2 e upscale Lanczos até 4x.">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+
+    <!-- PT Serif Bold Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=PT+Serif:wght@700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --cream: #FDFBF7;
+            --cream-card: #FAF7F2;
+            --mocha: #795548;
+            --coffee: #3E2723;
+            --coffee-light: #4E342E;
+            --latte: #D7CCC8;
+            --line: #E8E0DA;
+            --line-hairline: rgba(78, 52, 46, 0.14);
+            --ink: #3E2723;
+            --ink-muted: #8D6E63;
+            --accent-warm: #C7A27C;
+            --radius-outer: 20px;
+            --radius-inner: 14px;
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            margin: 0;
+            padding: 0;
+            font-family: 'PT Serif', Georgia, serif;
+            font-weight: 700;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100dvh;
+            margin: 0;
+            padding: 0;
+            background: var(--cream);
+            color: var(--ink);
+            font-family: 'PT Serif', Georgia, serif;
+            font-weight: 700;
+            overscroll-behavior: none;
+            touch-action: none;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            padding:
+                calc(8px + env(safe-area-inset-top))
+                calc(10px + env(safe-area-inset-right))
+                calc(8px + env(safe-area-inset-bottom))
+                calc(10px + env(safe-area-inset-left));
+            gap: 8px;
+            position: fixed;
+            inset: 0;
+        }
+
+        button, label, select, input {
+            font: inherit;
+            font-family: 'PT Serif', Georgia, serif;
+            font-weight: 700;
+            color: inherit;
+            border: 0;
+            background: none;
+            outline: none;
+        }
+        button { cursor: pointer; }
+
+        .icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
+        }
+
+        .icon svg {
+            width: 100%;
+            height: 100%;
+            fill: currentColor;
+        }
+
+        .panel {
+            background: var(--cream-card);
+            border: 1px solid var(--line-hairline);
+            box-shadow: 0 4px 18px rgba(62, 39, 35, 0.04);
+        }
+
+        #stage {
+            flex: 1 1 auto;
+            min-height: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        /* Card that acts as prominent hero upload button when empty */
+        #card {
+            position: relative;
+            border: 1px solid var(--line-hairline);
+            border-radius: var(--radius-outer);
+            background: var(--cream-card);
+            box-shadow: 0 12px 34px rgba(62, 39, 35, 0.065), 0 1px 3px rgba(62, 39, 35, 0.04);
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: width 0.22s ease-out, height 0.22s ease-out, box-shadow 0.2s ease, border-color 0.2s ease;
+        }
+
+        #card.empty {
+            width: min(100%, 480px);
+            height: min(100%, 560px);
+            cursor: pointer;
+        }
+        #card.empty:hover {
+            border-color: rgba(78, 52, 46, 0.32);
+            box-shadow: 0 16px 42px rgba(62, 39, 35, 0.09);
+        }
+        #card.empty:active {
+            transform: scale(0.985);
+        }
+        #card.drag-hover {
+            border-color: var(--coffee);
+            background: rgba(215, 204, 200, 0.44);
+            transform: scale(0.995);
+        }
+
+        #gl-canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: var(--cream-card);
+            pointer-events: none;
+        }
+
+        /* Minimalist hero upload trigger inside card */
+        #drop-zone {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 32px 24px;
+            gap: 12px;
+            background: var(--cream-card);
+            pointer-events: auto;
+        }
+        #drop-zone .icon-hero {
+            width: 48px;
+            height: 48px;
+            color: var(--coffee);
+            opacity: 0.85;
+            margin-bottom: 2px;
+        }
+        #drop-zone .title-text {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--coffee);
+            letter-spacing: 0.01em;
+            line-height: 1.2;
+        }
+        #drop-zone span.sub-text {
+            font-size: 13px;
+            color: var(--ink-muted);
+            font-weight: 700;
+            letter-spacing: 0.01em;
+        }
+
+        #workspace {
+            position: absolute;
+            inset: 0;
+            cursor: crosshair;
+        }
+        #workspace.hidden, #drop-zone.hidden {
+            display: none;
+        }
+
+        .pill {
+            position: absolute;
+            background: rgba(62, 39, 35, 0.90);
+            color: var(--cream);
+            border: 1px solid rgba(215, 204, 200, 0.35);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            padding: 5px 12px;
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+            z-index: 2;
+        }
+        #status-badge {
+            left: 10px;
+            bottom: 10px;
+        }
+
+        /* Discreet swap button when image is loaded */
+        #swap-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(62, 39, 35, 0.88);
+            color: var(--cream);
+            border: 1px solid rgba(215, 204, 200, 0.35);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            padding: 5px 12px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
+            z-index: 5;
+            cursor: pointer;
+            transition: background 0.15s ease;
+        }
+        #swap-btn:hover {
+            background: var(--coffee);
+        }
+        #swap-btn .icon { width: 13px; height: 13px; }
+
+        footer {
+            flex: 0 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+            position: relative;
+            z-index: 10;
+        }
+
+        /* Submenu of adjustments when clicking an active preset */
+        #adjustments-menu {
+            display: none;
+            flex-direction: column;
+            gap: 6px;
+            padding: 9px 12px 10px;
+            border-radius: var(--radius-inner);
+            background: var(--cream-card);
+            border: 1px solid var(--line-hairline);
+            box-shadow: 0 4px 20px rgba(62, 39, 35, 0.05);
+            animation: fadeInSubmenu 0.18s ease-out;
+        }
+        #adjustments-menu.open {
+            display: flex;
+        }
+        @keyframes fadeInSubmenu {
+            from { opacity: 0; transform: translateY(4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .adj-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-bottom: 4px;
+            border-bottom: 1px solid rgba(78, 52, 46, 0.08);
+            font-size: 11px;
+            color: var(--coffee);
+        }
+        .adj-title {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+        }
+        .adj-title .icon { width: 14px; height: 14px; color: var(--mocha); }
+        .adj-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-adj-reset {
+            font-size: 10.5px;
+            color: var(--ink-muted);
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 6px;
+            transition: color 0.15s, background 0.15s;
+        }
+        .btn-adj-reset:hover {
+            color: var(--coffee);
+            background: rgba(215, 204, 200, 0.3);
+        }
+        .btn-adj-close {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            cursor: pointer;
+            color: var(--ink-muted);
+            font-size: 12px;
+            line-height: 1;
+            transition: color 0.15s, background 0.15s;
+        }
+        .btn-adj-close:hover {
+            color: var(--coffee);
+            background: rgba(215, 204, 200, 0.4);
+        }
+
+        .adj-row {
+            display: grid;
+            grid-template-columns: 86px 1fr 44px;
+            align-items: center;
+            gap: 8px;
+            font-size: 11px;
+            color: var(--coffee);
+        }
+        .adj-label {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: var(--coffee);
+            font-size: 11px;
+        }
+        .adj-val {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            color: var(--mocha);
+            font-size: 11px;
+        }
+
+        input[type=range] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            background: transparent;
+            height: 18px;
+            cursor: pointer;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            height: 3.5px;
+            background: var(--latte);
+            border-radius: 4px;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 14px;
+            width: 14px;
+            border-radius: 50%;
+            background: var(--coffee);
+            margin-top: -5.25px;
+            box-shadow: 0 1px 3px rgba(62, 39, 35, 0.3);
+            border: 1px solid var(--cream);
+        }
+
+        .profiles {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+            padding: 5px;
+            border-radius: var(--radius-inner);
+        }
+
+        .profile-btn {
+            border-radius: 10px;
+            border: 1px solid transparent;
+            color: var(--mocha);
+            font-size: 11px;
+            font-weight: 700;
+            padding: 6px 0 5px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+            transition: all 0.15s ease;
+        }
+        .profile-btn .icon {
+            width: 18px;
+            height: 18px;
+        }
+        .profile-btn:hover {
+            color: var(--coffee);
+        }
+        .profile-btn.active {
+            background: rgba(215, 204, 200, 0.44);
+            border-color: rgba(215, 204, 200, 0.85);
+            color: var(--coffee);
+        }
+
+        .profile-btn .btn-tune-dot {
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: transparent;
+            transition: all 0.15s ease;
+            margin-top: -1px;
+        }
+        .profile-btn.active .btn-tune-dot {
+            background: var(--coffee);
+        }
+        .profile-btn.open-tuning .btn-tune-dot {
+            width: 14px;
+            height: 3px;
+            border-radius: 2px;
+            background: var(--coffee);
+        }
+
+        .bar {
+            height: 46px;
+            display: flex;
+            gap: 7px;
+            align-items: stretch;
+        }
+        .bar .panel {
+            border-radius: var(--radius-inner);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .upscale {
+            padding: 0 12px;
+            gap: 6px;
+            font-size: 11.5px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: var(--ink-muted);
+        }
+        #upscale-select {
+            background: transparent;
+            color: var(--coffee);
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            padding-right: 2px;
+        }
+
+        #download-btn {
+            flex: 1;
+            background: var(--coffee);
+            color: var(--cream);
+            border-radius: var(--radius-inner);
+            font-size: 15.5px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            transition: opacity 0.15s, transform 0.1s;
+            box-shadow: 0 2px 8px rgba(62, 39, 35, 0.18);
+        }
+        #download-btn:active:not(:disabled) {
+            transform: scale(0.99);
+        }
+        #download-btn:disabled {
+            background: var(--latte);
+            color: var(--mocha);
+            box-shadow: none;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+        #download-btn .icon {
+            width: 18px;
+            height: 18px;
+        }
+
+        #toast {
+            position: absolute;
+            left: 50%;
+            bottom: calc(100% + 14px);
+            transform: translateX(-50%);
+            background: rgba(62, 39, 35, 0.95);
+            color: var(--cream);
+            padding: 7px 16px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.25s ease;
+            white-space: nowrap;
+            z-index: 50;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+        }
+        #toast.visible {
+            opacity: 1;
+        }
+
+        @media (max-height: 660px) {
+            .bar { height: 42px; }
+            .profile-btn { padding: 5px 0 4px; font-size: 10.5px; }
+            body { gap: 6px; }
+        }
+    </style>
+</head>
+<body>
+    <input id="file-input" type="file" accept="image/*" hidden>
+
+    <main id="stage">
+        <!-- Hero card button for upload and image display -->
+        <div id="card" class="empty" role="button" tabindex="0" title="Toque para carregar foto">
+            <div id="drop-zone">
+                <span class="icon icon-hero">
+                    <svg viewBox="0 0 24 24"><path d="M4 4h3l2-2h6l2 2h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm8 3a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6z"/></svg>
+                </span>
+                <p class="title-text">Carregar Foto</p>
+                <span class="sub-text">Toque ou arraste a imagem aqui</span>
+            </div>
+            <div id="workspace" class="hidden">
+                <canvas id="gl-canvas"></canvas>
+                <div id="status-badge" class="pill">Auto · Dia</div>
+                <button id="swap-btn" type="button" title="Trocar imagem">
+                    <span class="icon"><svg viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg></span>
+                    Trocar
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <!-- Sub-menu de ajustes do preset selecionado (abre ao clicar no preset ativo) -->
+        <div id="adjustments-menu" class="panel">
+            <div class="adj-header">
+                <span id="adj-title" class="adj-title">
+                    <span class="icon"><svg viewBox="0 0 24 24"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg></span>
+                    Ajustes · Auto
+                </span>
+                <div class="adj-actions">
+                    <button id="btn-adj-reset" class="btn-adj-reset" type="button" title="Restaurar padrão do preset">Redefinir</button>
+                    <button id="btn-adj-close" class="btn-adj-close" type="button" title="Fechar ajustes">✕</button>
+                </div>
+            </div>
+
+            <div class="adj-row">
+                <span class="adj-label">Brilho</span>
+                <input id="slider-brilho" type="range" min="-0.25" max="0.25" step="0.01" value="0.00">
+                <span id="val-brilho" class="adj-val">+0.00</span>
+            </div>
+
+            <div class="adj-row">
+                <span class="adj-label">Contraste</span>
+                <input id="slider-contraste" type="range" min="0.60" max="1.60" step="0.02" value="1.10">
+                <span id="val-contraste" class="adj-val">1.10</span>
+            </div>
+
+            <div class="adj-row">
+                <span class="adj-label">Nitidez</span>
+                <input id="slider-nitidez" type="range" min="0.00" max="1.00" step="0.02" value="0.48">
+                <span id="val-nitidez" class="adj-val">0.48</span>
+            </div>
+
+            <div class="adj-row">
+                <span class="adj-label">Granulado</span>
+                <input id="slider-granulado" type="range" min="0.000" max="0.015" step="0.001" value="0.003">
+                <span id="val-granulado" class="adj-val">0.003</span>
+            </div>
+
+            <div class="adj-row">
+                <span class="adj-label">Ponto Preto</span>
+                <input id="slider-pontopreto" type="range" min="0.000" max="0.080" step="0.002" value="0.024">
+                <span id="val-pontopreto" class="adj-val">0.024</span>
+            </div>
+        </div>
+
+        <div class="profiles panel">
+            <button data-profile="auto" class="profile-btn active" type="button" title="Toque para ativar; toque novamente para abrir ajustes">
+                <span class="icon"><svg viewBox="0 0 24 24"><path d="m19 9 1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zm7.5 5.5-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z"/></svg></span>
+                <span>Auto</span>
+                <span class="btn-tune-dot"></span>
+            </button>
+            <button data-profile="retrato" class="profile-btn" type="button" title="Toque para ativar; toque novamente para abrir ajustes">
+                <span class="icon"><svg viewBox="0 0 24 24"><path d="M12 2a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0 12c-4.42 0-8 1.79-8 4v2h16v-2c0-2.21-3.58-4-8-4z"/></svg></span>
+                <span>Pele</span>
+                <span class="btn-tune-dot"></span>
+            </button>
+            <button data-profile="dia" class="profile-btn" type="button" title="Toque para ativar; toque novamente para abrir ajustes">
+                <span class="icon"><svg viewBox="0 0 24 24"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 0 0-1.41 0 .996.996 0 0 0 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 0 0-1.41 0 .996.996 0 0 0 0 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 0 0 0-1.41.996.996 0 0 0-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36a.996.996 0 0 0 0-1.41.996.996 0 0 0-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/></svg></span>
+                <span>HDR</span>
+                <span class="btn-tune-dot"></span>
+            </button>
+            <button data-profile="noite" class="profile-btn" type="button" title="Toque para ativar; toque novamente para abrir ajustes">
+                <span class="icon"><svg viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg></span>
+                <span>Noite</span>
+                <span class="btn-tune-dot"></span>
+            </button>
+        </div>
+
+        <div class="bar">
+            <div class="panel upscale">
+                <span>Upscale</span>
+                <select id="upscale-select">
+                    <option value="1">1x</option>
+                    <option value="2" selected>2x</option>
+                    <option value="3">3x</option>
+                    <option value="4">4x</option>
+                </select>
+            </div>
+            <button id="download-btn" type="button" disabled>
+                <span class="icon"><svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg></span>
+                <span id="download-btn-text">Salvar</span>
+            </button>
+        </div>
+        <div id="toast"></div>
+    </footer>
+
+    <script>
+        /**
+         * Pi-ctures WebGL2 Processing Pipeline
+         * Direct translation and evolution of realista.py
+         */
+        const VS = `#version 300 es
+        in vec2 a_position;
+        out vec2 v_uv;
+        void main() {
+            v_uv = a_position * 0.5 + 0.5;
+            gl_Position = vec4(a_position, 0.0, 1.0);
+        }`;
+
+        const FS = `#version 300 es
+        precision highp float;
+
+        in vec2 v_uv;
+        out vec4 fragColor;
+
+        uniform sampler2D u_image;
+        uniform vec2 u_srcSize;
+        uniform vec2 u_origin;
+        uniform vec2 u_tile;
+        uniform vec2 u_dstSize;
+        uniform float u_original;
+        uniform float u_lanczos;
+        uniform float u_brightness;
+        uniform float u_compress;
+        uniform float u_skin;
+        uniform float u_sharp;
+        uniform float u_halo;
+        uniform float u_hair;
+        uniform float u_bloom;
+        uniform float u_glint;
+        uniform float u_grain;
+        uniform float u_ca;
+        uniform float u_vig;
+        uniform float u_bp;
+        uniform float u_sat;
+        uniform float u_mean;
+        uniform int u_night;
+
+        // Accurate sRGB <-> Linear transformations
+        vec3 srgbToLin(vec3 c) {
+            return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));
+        }
+
+        vec3 linToSrgb(vec3 c) {
+            c = clamp(c, 0.0, 1.0);
+            return mix(12.92 * c, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
+        }
+
+        // Standard D65 sRGB to XYZ (Column-major in GLSL)
+        vec3 linToXyz(vec3 c) {
+            mat3 m = mat3(
+                0.4124564, 0.2126729, 0.0193339,
+                0.3575761, 0.7151522, 0.1191920,
+                0.1804375, 0.0721750, 0.9503041
+            );
+            return m * c;
+        }
+
+        // XYZ to Linear sRGB
+        vec3 xyzToLin(vec3 c) {
+            mat3 m = mat3(
+                3.2404542, -0.9692660, 0.0556434,
+                -1.5371385, 1.8760108, -0.2040259,
+                -0.4985314, 0.0415560, 1.0572252
+            );
+            return m * c;
+        }
+
+        // Standard CIE L*a*b* conversion (D65)
+        vec3 xyzToLab(vec3 c) {
+            vec3 n = c / vec3(0.95047, 1.00000, 1.08883);
+            vec3 f = mix(7.787 * n + (16.0 / 116.0), pow(max(n, vec3(1e-6)), vec3(1.0 / 3.0)), step(0.008856, n));
+            return vec3(116.0 * f.y - 16.0, 500.0 * (f.x - f.y), 200.0 * (f.y - f.z));
+        }
+
+        vec3 labToXyz(vec3 lab) {
+            float fy = (lab.x + 16.0) / 116.0;
+            float fx = lab.y / 500.0 + fy;
+            float fz = fy - lab.z / 200.0;
+            vec3 f = vec3(fx, fy, fz);
+            vec3 p = mix((f - (16.0 / 116.0)) / 7.787, f * f * f, step(0.206897, f));
+            return p * vec3(0.95047, 1.00000, 1.08883);
+        }
+
+        // Lanczos-3 kernel for upscale
+        float lanczos(float x) {
+            x = abs(x);
+            if (x < 1e-5) return 1.0;
+            if (x >= 3.0) return 0.0;
+            float pix = 3.14159265359 * x;
+            return 3.0 * sin(pix) * sin(pix / 3.0) / (pix * pix);
+        }
+
+        vec3 sampleLanczos(vec2 uv) {
+            uv = clamp(uv, 0.0, 1.0);
+            if (u_lanczos < 0.5) {
+                return texture(u_image, uv).rgb;
+            }
+            vec2 srcPos = uv * u_srcSize - 0.5;
+            vec2 base = floor(srcPos);
+            vec3 acc = vec3(0.0);
+            float wsum = 0.0;
+            for (int j = -2; j <= 3; j++) {
+                for (int i = -2; i <= 3; i++) {
+                    vec2 p = base + vec2(float(i), float(j));
+                    float wx = lanczos(srcPos.x - p.x);
+                    float wy = lanczos(srcPos.y - p.y);
+                    float w = wx * wy;
+                    vec2 tuv = (p + 0.5) / u_srcSize;
+                    acc += texture(u_image, clamp(tuv, 0.0, 1.0)).rgb * w;
+                    wsum += w;
+                }
+            }
+            return clamp(acc / max(wsum, 1e-4), 0.0, 1.0);
+        }
+
+        // Lateral Chromatic Aberration matching realista.py escala_centro
+        vec3 sampleSrc(vec2 uv) {
+            if (u_ca <= 0.00001) {
+                return sampleLanczos(uv);
+            }
+            vec2 center = vec2(0.5, 0.5);
+            vec2 toCenter = uv - center;
+            vec2 uvR = center + toCenter * (1.0 / (1.0 + u_ca));
+            vec2 uvB = center + toCenter * (1.0 / (1.0 - u_ca));
+            float r = sampleLanczos(uvR).r;
+            float g = sampleLanczos(uv).g;
+            float b = sampleLanczos(uvB).b;
+            return vec3(r, g, b);
+        }
+
+        float luma(vec3 c) {
+            return dot(c, vec3(0.2126, 0.7152, 0.0722));
+        }
+
+        float hash(vec2 p) {
+            return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+        }
+
+        void main() {
+            vec2 pix = vec2(u_origin.x + gl_FragCoord.x, u_origin.y + (u_tile.y - gl_FragCoord.y));
+            vec2 uv = pix / u_dstSize;
+            vec3 src = sampleSrc(uv);
+
+            // Instant original comparison toggle
+            if (u_original > 0.5) {
+                fragColor = vec4(src, 1.0);
+                return;
+            }
+
+            // Output-space pixel step: EXACTLY 1 pixel in the canvas/output image
+            vec2 px = 1.0 / u_dstSize;
+            float L0 = luma(src);
+
+            // 1) 3x3 High-Pass Kernel (Laplacian / Unsharp Mask)
+            // Samples the immediate 8 neighbors in screen/output space
+            float fN  = luma(sampleSrc(uv + vec2(0.0, -px.y)));
+            float fS  = luma(sampleSrc(uv + vec2(0.0, px.y)));
+            float fE  = luma(sampleSrc(uv + vec2(px.x, 0.0)));
+            float fW  = luma(sampleSrc(uv - vec2(px.x, 0.0)));
+            float fNE = luma(sampleSrc(uv + vec2(px.x, -px.y)));
+            float fNW = luma(sampleSrc(uv + vec2(-px.x, -px.y)));
+            float fSE = luma(sampleSrc(uv + vec2(px.x, px.y)));
+            float fSW = luma(sampleSrc(uv + vec2(-px.x, px.y)));
+
+            // Gaussian-weighted 3x3 neighborhood average
+            float blur3 = (fN + fS + fE + fW) * 0.125 + (fNE + fNW + fSE + fSW) * 0.0625 + L0 * 0.25;
+            float fineDetail = L0 - blur3; // Micro-contrast: pores, eyelashes, fine edges
+
+            // 2) 5x5 Acutance Kernel (hair strands, beard, facial contours)
+            float mN  = luma(sampleSrc(uv + vec2(0.0, -px.y * 2.0)));
+            float mS  = luma(sampleSrc(uv + vec2(0.0, px.y * 2.0)));
+            float mE  = luma(sampleSrc(uv + vec2(px.x * 2.0, 0.0)));
+            float mW  = luma(sampleSrc(uv - vec2(px.x * 2.0, 0.0)));
+            float blur5 = (mN + mS + mE + mW) * 0.25;
+            float midDetail = blur3 - blur5; // Medium acutance
+
+            // 3) Directional Morphological Hair & Lash Enhancement (realista.py)
+            float hairDark = 0.0;
+            float hairLight = 0.0;
+            float aniso = 0.0;
+            for (int i = 0; i < 6; i++) {
+                float a = 3.14159265 * float(i) / 6.0;
+                vec2 d = vec2(cos(a), sin(a)) * px * 2.0;
+                float c1 = luma(sampleSrc(uv + d));
+                float c2 = luma(sampleSrc(uv - d));
+                float lineVal = (c1 + c2) * 0.5;
+                hairDark = max(hairDark, clamp(lineVal - L0, 0.0, 1.0));
+                hairLight = max(hairLight, clamp(L0 - lineVal, 0.0, 1.0));
+                vec2 p = vec2(-d.y, d.x);
+                float side = abs(luma(sampleSrc(uv + p)) - luma(sampleSrc(uv - p)));
+                aniso = max(aniso, clamp((abs(L0 - lineVal) * 5.0) - side * 2.5, 0.0, 1.0));
+            }
+            float hairRegiao = clamp(aniso * 1.5, 0.0, 1.0) * u_hair;
+
+            // 4) Razor Sharpness Reconstruction (L0 IS THE ANCHOR - NEVER BLURRED!)
+            float sharpL = L0 + fineDetail * (u_sharp * 2.4) + midDetail * (u_halo * 1.2);
+            sharpL -= 0.16 * u_hair * hairDark * (0.3 + 0.7 * hairRegiao);
+            sharpL += 0.12 * u_hair * hairLight * hairRegiao;
+            sharpL += 0.65 * u_hair * hairRegiao * fineDetail;
+
+            // 5) Anchored Black Point: Eliminates washed-out haze
+            float bpVal = max(u_bp, 0.015);
+            float normL = clamp((sharpL - bpVal) / max(1.0 - bpVal, 0.01), 0.0, 1.0);
+
+            // 6) Photographic Film Contrast S-Curve (Punchy contrast, crisp highlights)
+            float k = clamp(u_compress, 0.60, 1.60);
+            float sc = normL - 0.5;
+            float sCurve = 0.5 + sign(sc) * pow(abs(sc) * 2.0, k) * 0.5;
+
+            // Photographic exposure with highlight protection
+            float outL = clamp(sCurve + u_brightness * (1.0 - 0.35 * sCurve), 0.0, 1.0);
+
+            // 7) Clean Luminance Modulation with Chroma Preservation (ZERO BLUR, ZERO PORCELAIN)
+            // Color ratios are preserved with extreme fidelity
+            float lumaRatio = outL / max(L0, 0.0005);
+            vec3 rgb = clamp(src * lumaRatio, 0.0, 1.0);
+
+            // Skin Tone Detection & Vitality
+            float maxC = max(rgb.r, max(rgb.g, rgb.b));
+            float minC = min(rgb.r, min(rgb.g, rgb.b));
+            float deltaC = maxC - minC;
+            float isSkin = step(0.04, deltaC) * step(rgb.b, rgb.g) * step(rgb.g, rgb.r) * smoothstep(0.12, 0.88, outL);
+
+            // Natural Saturation boost centered in midtones (never boosting noisy shadows)
+            float midSatFactor = 1.0 + 0.35 * sin(clamp(outL, 0.0, 1.0) * 3.14159);
+            float effSat = 1.0 + (u_sat - 1.0) * midSatFactor;
+            
+            // Subtle skin vitality (healthy warm radiance, NEVER flat paint)
+            float skinRadiance = 1.0 + 0.08 * isSkin * u_skin;
+            vec3 gray = vec3(outL);
+            rgb = clamp(mix(gray, rgb, effSat * skinRadiance), 0.0, 1.0);
+
+            // 8) Perfil Noite: Bloom & Specular Glints
+            if (u_bloom > 0.0) {
+                vec3 glow = vec3(0.0);
+                for (int i = 0; i < 8; i++) {
+                    float a = 6.2831853 * float(i) / 8.0;
+                    vec3 s = sampleSrc(uv + vec2(cos(a), sin(a)) * px * 6.0);
+                    glow += max(s - 0.76, 0.0);
+                }
+                rgb += glow * (u_bloom * 0.20);
+                rgb += max(rgb - 0.80, 0.0) * (u_bloom * 0.35);
+            }
+            if (u_glint > 0.0 && L0 > 0.93) {
+                rgb += vec3(1.0, 0.97, 0.92) * u_glint * (L0 - 0.93) * 6.0;
+            }
+
+            // 9) Optical Vignette
+            if (u_vig > 0.001) {
+                vec2 vn = (uv - 0.5) * vec2(1.0, u_dstSize.y / u_dstSize.x);
+                float rr = length(vn) / length(vec2(0.5, 0.5 * u_dstSize.y / u_dstSize.x));
+                rgb *= (1.0 - u_vig * pow(clamp(rr, 0.0, 1.4), 2.2));
+            }
+
+            // 10) Organic Sensor Grain & Texture
+            float g = u_grain;
+            if (u_night == 1) g = max(g, 0.004);
+            if (g > 0.0) {
+                float n = hash(pix + vec2(17.3, 43.1)) - 0.5;
+                float toneFactor = 0.5 + 0.8 * pow(1.0 - clamp(outL, 0.0, 1.0), 1.2);
+                rgb += n * g * 2.8 * toneFactor;
+            }
+
+            fragColor = vec4(clamp(rgb, 0.0, 1.0), 1.0);
+        }`;
+
+        // Robust Presets calibrated directly from realista.py
+        const PROFILES = {
+            auto: {
+                brightness: 0.0, compress: 1.10, skin: 0.20, sharp: 0.55, halo: 0.15, hair: 1.25,
+                bloom: 0.0, glint: 0.0, grain: 0.003, ca: 0.0, vig: 0.04, sat: 1.08, bp: 0.024, night: 0
+            },
+            retrato: {
+                brightness: 0.02, compress: 1.08, skin: 0.25, sharp: 0.60, halo: 0.12, hair: 1.40,
+                bloom: 0.02, glint: 0.0, grain: 0.002, ca: 0.0, vig: 0.035, sat: 1.08, bp: 0.022, night: 0
+            },
+            dia: {
+                brightness: 0.0, compress: 1.16, skin: 0.10, sharp: 0.68, halo: 0.18, hair: 1.10,
+                bloom: 0.0, glint: 0.0, grain: 0.0025, ca: 0.0, vig: 0.03, sat: 1.12, bp: 0.028, night: 0
+            },
+            noite: {
+                brightness: 0.0, compress: 1.12, skin: 0.10, sharp: 0.50, halo: 0.12, hair: 1.05,
+                bloom: 0.12, glint: 0.08, grain: 0.0045, ca: 0.0, vig: 0.07, sat: 1.06, bp: 0.036, night: 1
+            }
+        };
+
+        class RealisticApp {
+            constructor() {
+                this.canvas = document.getElementById("gl-canvas");
+                this.gl = this.canvas.getContext("webgl2", {
+                    alpha: false,
+                    antialias: false,
+                    premultipliedAlpha: false,
+                    preserveDrawingBuffer: false,
+                    powerPreference: "high-performance"
+                });
+                this.img = null;
+                this.imgName = "foto";
+                this.profile = "auto";
+                this.p = Object.assign({}, PROFILES.auto);
+                this.original = 0;
+                this.bp = 0.02;
+                this.meanLuma = 0.5;
+                this.tex = null;
+                this.exporting = false;
+
+                this.init();
+            }
+
+            init() {
+                if (!this.gl) {
+                    this.showToast("WebGL2 não disponível neste navegador.");
+                    return;
+                }
+                const gl = this.gl;
+                const vs = this.compileShader(gl.VERTEX_SHADER, VS);
+                const fs = this.compileShader(gl.FRAGMENT_SHADER, FS);
+                this.prog = gl.createProgram();
+                gl.attachShader(this.prog, vs);
+                gl.attachShader(this.prog, fs);
+                gl.linkProgram(this.prog);
+
+                if (!gl.getProgramParameter(this.prog, gl.LINK_STATUS)) {
+                    console.error(gl.getProgramInfoLog(this.prog));
+                    this.showToast("Erro ao compilar shaders WebGL2.");
+                    return;
+                }
+
+                const quadBuf = gl.createBuffer();
+                gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+                gl.bufferData(
+                    gl.ARRAY_BUFFER,
+                    new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]),
+                    gl.STATIC_DRAW
+                );
+                const loc = gl.getAttribLocation(this.prog, "a_position");
+                gl.enableVertexAttribArray(loc);
+                gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+
+                this.bindEvents();
+                this.initAdjustments();
+                this.updateLayout();
+            }
+
+            compileShader(type, src) {
+                const gl = this.gl;
+                const sh = gl.createShader(type);
+                gl.shaderSource(sh, src);
+                gl.compileShader(sh);
+                if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+                    console.error(gl.getShaderInfoLog(sh));
+                }
+                return sh;
+            }
+
+            showToast(msg, duration = 3000) {
+                const toast = document.getElementById("toast");
+                toast.textContent = msg;
+                toast.classList.add("visible");
+                clearTimeout(this._toastTimer);
+                this._toastTimer = setTimeout(() => toast.classList.remove("visible"), duration);
+            }
+
+            bindEvents() {
+                const fileInput = document.getElementById("file-input");
+                fileInput.addEventListener("change", (e) => {
+                    if (e.target.files && e.target.files[0]) {
+                        this.loadFile(e.target.files[0]);
+                    }
+                });
+
+                const card = document.getElementById("card");
+                // Card click triggers file upload when empty
+                card.addEventListener("click", (e) => {
+                    if (!this.img) {
+                        fileInput.click();
+                    }
+                });
+
+                // Swap button triggers file upload when image is already loaded
+                const swapBtn = document.getElementById("swap-btn");
+                swapBtn.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    fileInput.click();
+                });
+
+                // Global drag & drop
+                window.addEventListener("dragover", (e) => e.preventDefault());
+                window.addEventListener("drop", (e) => {
+                    e.preventDefault();
+                    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                        this.loadFile(e.dataTransfer.files[0]);
+                    }
+                });
+
+                // Profile click: if already active preset is clicked, toggle adjustments submenu!
+                document.querySelectorAll(".profile-btn").forEach(btn => {
+                    btn.addEventListener("click", () => {
+                        const targetProfile = btn.dataset.profile;
+                        if (this.profile === targetProfile) {
+                            this.toggleAdjustments();
+                        } else {
+                            this.setProfile(targetProfile);
+                        }
+                    });
+                });
+
+                // Touch & hold comparison
+                const pressStart = (e) => {
+                    if (!this.img) return;
+                    if (e.target.closest("#swap-btn") || e.target.closest("footer")) return;
+                    e.preventDefault();
+                    this.original = 1;
+                    document.getElementById("status-badge").textContent = "Original";
+                    this.draw();
+                };
+                const pressEnd = (e) => {
+                    if (!this.img) return;
+                    if (e) e.preventDefault();
+                    this.original = 0;
+                    document.getElementById("status-badge").textContent = this.badgeText();
+                    this.draw();
+                };
+
+                const ws = document.getElementById("workspace");
+                ws.addEventListener("pointerdown", pressStart);
+                window.addEventListener("pointerup", pressEnd);
+                window.addEventListener("pointercancel", pressEnd);
+
+                document.getElementById("download-btn").addEventListener("click", () => this.save());
+
+                // Zero-scroll & viewport adaptation
+                const onResize = () => this.updateLayout();
+                window.addEventListener("resize", onResize);
+                if (window.visualViewport) {
+                    window.visualViewport.addEventListener("resize", onResize);
+                }
+
+                // Prevent gestures and pinches on mobile
+                document.addEventListener("gesturestart", (e) => e.preventDefault());
+                document.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+            }
+
+            profileDisplayName(name = this.profile) {
+                if (name === "retrato") return "Pele";
+                if (name === "dia") return "HDR";
+                if (name === "noite") return "Noite";
+                return "Auto";
+            }
+
+            initAdjustments() {
+                const slBrilho = document.getElementById("slider-brilho");
+                const slContraste = document.getElementById("slider-contraste");
+                const slNitidez = document.getElementById("slider-nitidez");
+                const slGranulado = document.getElementById("slider-granulado");
+                const slPontoPreto = document.getElementById("slider-pontopreto");
+
+                slBrilho.addEventListener("input", () => {
+                    this.p.brightness = parseFloat(slBrilho.value);
+                    const v = this.p.brightness;
+                    document.getElementById("val-brilho").textContent = (v >= 0 ? "+" : "") + v.toFixed(2);
+                    this.draw();
+                });
+
+                slContraste.addEventListener("input", () => {
+                    this.p.compress = parseFloat(slContraste.value);
+                    document.getElementById("val-contraste").textContent = this.p.compress.toFixed(2);
+                    this.draw();
+                });
+
+                slNitidez.addEventListener("input", () => {
+                    this.p.sharp = parseFloat(slNitidez.value);
+                    document.getElementById("val-nitidez").textContent = this.p.sharp.toFixed(2);
+                    this.draw();
+                });
+
+                slGranulado.addEventListener("input", () => {
+                    this.p.grain = parseFloat(slGranulado.value);
+                    document.getElementById("val-granulado").textContent = this.p.grain.toFixed(3);
+                    this.draw();
+                });
+
+                slPontoPreto.addEventListener("input", () => {
+                    this.p.bp = parseFloat(slPontoPreto.value);
+                    document.getElementById("val-pontopreto").textContent = this.p.bp.toFixed(3);
+                    this.draw();
+                });
+
+                document.getElementById("btn-adj-reset").addEventListener("click", () => {
+                    this.resetProfileAdjustments();
+                });
+
+                document.getElementById("btn-adj-close").addEventListener("click", () => {
+                    this.toggleAdjustments(false);
+                });
+            }
+
+            syncSliderInputs() {
+                const slBrilho = document.getElementById("slider-brilho");
+                const slContraste = document.getElementById("slider-contraste");
+                const slNitidez = document.getElementById("slider-nitidez");
+                const slGranulado = document.getElementById("slider-granulado");
+                const slPontoPreto = document.getElementById("slider-pontopreto");
+
+                const br = this.p.brightness || 0.0;
+                slBrilho.value = br;
+                document.getElementById("val-brilho").textContent = (br >= 0 ? "+" : "") + br.toFixed(2);
+
+                slContraste.value = this.p.compress;
+                document.getElementById("val-contraste").textContent = this.p.compress.toFixed(2);
+
+                slNitidez.value = this.p.sharp;
+                document.getElementById("val-nitidez").textContent = this.p.sharp.toFixed(2);
+
+                slGranulado.value = this.p.grain;
+                document.getElementById("val-granulado").textContent = this.p.grain.toFixed(3);
+
+                slPontoPreto.value = this.p.bp;
+                document.getElementById("val-pontopreto").textContent = this.p.bp.toFixed(3);
+
+                document.getElementById("adj-title").textContent = `Ajustes · ${this.profileDisplayName()}`;
+            }
+
+            resetProfileAdjustments() {
+                const base = Object.assign({}, PROFILES[this.profile]);
+                if (this.profile === "auto") {
+                    const isNight = this.meanLuma < 0.294;
+                    this.p = Object.assign({}, isNight ? PROFILES.noite : PROFILES.dia);
+                    this.p.night = isNight ? 1 : 0;
+                    this.p.bp = this.bp || this.p.bp;
+                } else {
+                    this.p = base;
+                    if (this.bp) this.p.bp = Math.max(base.bp, this.bp);
+                }
+                this.syncSliderInputs();
+                this.draw();
+                this.showToast(`Padrão restaurado para ${this.profileDisplayName()}`);
+            }
+
+            toggleAdjustments(force) {
+                const menu = document.getElementById("adjustments-menu");
+                const isOpen = force !== undefined ? force : !menu.classList.contains("open");
+
+                menu.classList.toggle("open", isOpen);
+
+                // Update active profile button tuning indicator
+                document.querySelectorAll(".profile-btn").forEach(btn => {
+                    if (btn.dataset.profile === this.profile) {
+                        btn.classList.toggle("open-tuning", isOpen);
+                    } else {
+                        btn.classList.remove("open-tuning");
+                    }
+                });
+
+                if (isOpen) {
+                    this.syncSliderInputs();
+                }
+
+                // Smoothly resize image/card to fit reduced or expanded stage area
+                this.updateLayout();
+                requestAnimationFrame(() => {
+                    this.updateLayout();
+                    setTimeout(() => this.updateLayout(), 230);
+                });
+            }
+
+            badgeText() {
+                if (this.profile === "noite") return "Noite";
+                if (this.profile === "dia") return "HDR";
+                if (this.profile === "retrato") return "Pele";
+                return this.meanLuma < 0.294 ? "Auto · Noite" : "Auto · Dia";
+            }
+
+            setProfile(name) {
+                this.profile = name;
+                document.querySelectorAll(".profile-btn").forEach(btn => {
+                    const isActive = btn.dataset.profile === name;
+                    btn.classList.toggle("active", isActive);
+                    if (!isActive) btn.classList.remove("open-tuning");
+                });
+
+                const base = Object.assign({}, PROFILES[name]);
+                if (name === "auto") {
+                    const isNight = this.meanLuma < 0.294;
+                    this.p = Object.assign({}, isNight ? PROFILES.noite : PROFILES.dia);
+                    this.p.night = isNight ? 1 : 0;
+                    this.p.bp = this.bp || this.p.bp;
+                } else {
+                    this.p = base;
+                    if (this.bp) this.p.bp = Math.max(base.bp, this.bp);
+                }
+
+                const menu = document.getElementById("adjustments-menu");
+                if (menu.classList.contains("open")) {
+                    this.syncSliderInputs();
+                    const activeBtn = document.querySelector(`.profile-btn[data-profile="${name}"]`);
+                    if (activeBtn) activeBtn.classList.add("open-tuning");
+                }
+
+                document.getElementById("status-badge").textContent = this.badgeText();
+                this.draw();
+            }
+
+            analyze(img) {
+                const c = document.createElement("canvas");
+                const w = 160;
+                const h = Math.max(1, Math.round(w * img.height / img.width));
+                c.width = w;
+                c.height = h;
+                const ctx = c.getContext("2d", { willReadFrequently: true });
+                ctx.drawImage(img, 0, 0, w, h);
+                const d = ctx.getImageData(0, 0, w, h).data;
+                const Ls = [];
+                let sum = 0;
+                for (let i = 0; i < d.length; i += 4) {
+                    const y = (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255.0;
+                    Ls.push(y);
+                    sum += y;
+                }
+                Ls.sort((a, b) => a - b);
+                this.meanLuma = sum / Ls.length;
+                // Calibrate black point from 0.7% percentile * bp_frac (0.95)
+                const p07 = Ls[Math.max(0, Math.floor(Ls.length * 0.007))];
+                this.bp = Math.max(0.015, Math.min(0.065, p07 * 0.95));
+            }
+
+            async loadFile(file) {
+                this.imgName = file.name.replace(/\.[^/.]+$/, "");
+                let loaded = false;
+                try {
+                    const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
+                    this.setImage(bmp);
+                    loaded = true;
+                } catch (_) {}
+
+                if (!loaded) {
+                    const url = URL.createObjectURL(file);
+                    const img = new Image();
+                    img.onload = () => {
+                        URL.revokeObjectURL(url);
+                        this.setImage(img);
+                    };
+                    img.src = url;
+                }
+            }
+
+            setImage(img) {
+                this.img = img;
+                this.analyze(img);
+
+                const gl = this.gl;
+                if (this.tex) gl.deleteTexture(this.tex);
+                this.tex = gl.createTexture();
+                gl.bindTexture(gl.TEXTURE_2D, this.tex);
+                gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+                gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+                gl.generateMipmap(gl.TEXTURE_2D);
+
+                document.getElementById("drop-zone").classList.add("hidden");
+                document.getElementById("workspace").classList.remove("hidden");
+                document.getElementById("card").classList.remove("empty");
+                document.getElementById("download-btn").disabled = false;
+
+                this.setProfile(this.profile);
+                this.updateLayout();
+            }
+
+            // Dynamic layout matching device height and image aspect ratio perfectly
+            updateLayout() {
+                const stage = document.getElementById("stage");
+                const card = document.getElementById("card");
+                if (!this.img) {
+                    card.classList.add("empty");
+                    card.style.width = "";
+                    card.style.height = "";
+                    return;
+                }
+
+                const pad = 4;
+                const availableW = Math.max(20, stage.clientWidth - pad);
+                const availableH = Math.max(20, stage.clientHeight - pad);
+                const imgAspect = this.img.width / this.img.height;
+
+                let cardW = availableW;
+                let cardH = cardW / imgAspect;
+
+                if (cardH > availableH) {
+                    cardH = availableH;
+                    cardW = cardH * imgAspect;
+                }
+
+                card.style.width = Math.max(1, Math.floor(cardW)) + "px";
+                card.style.height = Math.max(1, Math.floor(cardH)) + "px";
+
+                const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+                this.canvas.width = Math.max(1, Math.floor(cardW * dpr));
+                this.canvas.height = Math.max(1, Math.floor(cardH * dpr));
+
+                this.draw();
+            }
+
+            draw() {
+                if (!this.img || !this.gl || this.exporting) return;
+                const gl = this.gl;
+                gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+                gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+                gl.useProgram(this.prog);
+                gl.bindTexture(gl.TEXTURE_2D, this.tex);
+
+                this.setUniforms(
+                    0, 0,
+                    this.canvas.width, this.canvas.height,
+                    this.canvas.width, this.canvas.height,
+                    0
+                );
+
+                gl.drawArrays(gl.TRIANGLES, 0, 6);
+            }
+
+            setUniforms(ox, oy, tw, th, dw, dh, lanczos) {
+                const gl = this.gl;
+                const u = (n) => gl.getUniformLocation(this.prog, n);
+
+                gl.uniform2f(u("u_srcSize"), this.img.width, this.img.height);
+                gl.uniform2f(u("u_origin"), ox, oy);
+                gl.uniform2f(u("u_tile"), tw, th);
+                gl.uniform2f(u("u_dstSize"), dw, dh);
+                gl.uniform1f(u("u_original"), this.original);
+                gl.uniform1f(u("u_lanczos"), lanczos);
+                gl.uniform1f(u("u_brightness"), this.p.brightness || 0.0);
+                gl.uniform1f(u("u_compress"), this.p.compress);
+                gl.uniform1f(u("u_skin"), this.p.skin);
+                gl.uniform1f(u("u_sharp"), this.p.sharp);
+                gl.uniform1f(u("u_halo"), this.p.halo);
+                gl.uniform1f(u("u_hair"), this.p.hair);
+                gl.uniform1f(u("u_bloom"), this.p.bloom);
+                gl.uniform1f(u("u_glint"), this.p.glint);
+                gl.uniform1f(u("u_grain"), this.p.grain);
+                gl.uniform1f(u("u_ca"), this.p.ca);
+                gl.uniform1f(u("u_vig"), this.p.vig);
+                gl.uniform1f(u("u_bp"), this.p.bp !== undefined ? this.p.bp : this.bp);
+                gl.uniform1f(u("u_sat"), this.p.sat);
+                gl.uniform1f(u("u_mean"), this.meanLuma || 0.46);
+                gl.uniform1i(u("u_night"), this.p.night);
+            }
+
+            // Real Lanczos GPU Upscaling & Tiled Output Engine
+            async save() {
+                if (!this.img || this.exporting) return;
+                const btn = document.getElementById("download-btn");
+                const btnText = document.getElementById("download-btn-text");
+                const scale = parseInt(document.getElementById("upscale-select").value, 10) || 1;
+
+                const targetW = this.img.width * scale;
+                const targetH = this.img.height * scale;
+
+                // Megapixel safety check (realista.py max-mp)
+                const totalMP = (targetW * targetH) / 1e6;
+                if (totalMP > 64) {
+                    this.showToast(`Resolução muito alta (${totalMP.toFixed(1)} MP). Use até 2x.`);
+                    return;
+                }
+
+                this.exporting = true;
+                this.original = 0;
+                btn.disabled = true;
+                btnText.textContent = `Processando ${scale}x...`;
+
+                try {
+                    const blob = await this.renderScaledTiles(targetW, targetH, scale, (pct) => {
+                        btnText.textContent = `Upscale ${scale}x (${pct}%)`;
+                    });
+
+                    const a = document.createElement("a");
+                    const ext = ".jpg";
+                    const filename = `${this.imgName}_realista_${scale}x${ext}`;
+                    a.href = URL.createObjectURL(blob);
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+
+                    this.showToast(`Salvo com sucesso: ${targetW}×${targetH} px`);
+                } catch (err) {
+                    console.error(err);
+                    this.showToast(`Memória insuficiente para ${scale}x. Tente 2x.`);
+                } finally {
+                    this.exporting = false;
+                    btn.disabled = false;
+                    btnText.textContent = "Salvar";
+                    this.draw();
+                }
+            }
+
+            renderScaledTiles(dstW, dstH, scale, onProgress) {
+                const gl = this.gl;
+                const maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE) || 4096;
+                const tileSize = Math.min(1024, maxTex);
+
+                const outCanvas = document.createElement("canvas");
+                outCanvas.width = dstW;
+                outCanvas.height = dstH;
+                const outCtx = outCanvas.getContext("2d", { alpha: false, willReadFrequently: true });
+
+                if (!outCtx) {
+                    return Promise.reject(new Error("Não foi possível alocar o canvas de saída."));
+                }
+
+                const fbo = gl.createFramebuffer();
+                const renderTex = gl.createTexture();
+                gl.bindTexture(gl.TEXTURE_2D, renderTex);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+                gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+                gl.useProgram(this.prog);
+                gl.bindTexture(gl.TEXTURE_2D, this.tex);
+
+                const lanczos = scale > 1 ? 1 : 0;
+                const totalTilesX = Math.ceil(dstW / tileSize);
+                const totalTilesY = Math.ceil(dstH / tileSize);
+                const totalTiles = totalTilesX * totalTilesY;
+                let processedTiles = 0;
+
+                const step = () => new Promise(resolve => requestAnimationFrame(resolve));
+
+                return new Promise(async (resolve, reject) => {
+                    try {
+                        for (let y = 0; y < dstH; y += tileSize) {
+                            for (let x = 0; x < dstW; x += tileSize) {
+                                const tw = Math.min(tileSize, dstW - x);
+                                const th = Math.min(tileSize, dstH - y);
+
+                                gl.bindTexture(gl.TEXTURE_2D, renderTex);
+                                gl.texImage2D(
+                                    gl.TEXTURE_2D, 0, gl.RGBA,
+                                    tw, th, 0,
+                                    gl.RGBA, gl.UNSIGNED_BYTE, null
+                                );
+                                gl.framebufferTexture2D(
+                                    gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
+                                    gl.TEXTURE_2D, renderTex, 0
+                                );
+
+                                gl.viewport(0, 0, tw, th);
+                                gl.bindTexture(gl.TEXTURE_2D, this.tex);
+                                this.setUniforms(x, y, tw, th, dstW, dstH, lanczos);
+                                gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+                                const pixelData = new Uint8Array(tw * th * 4);
+                                gl.readPixels(0, 0, tw, th, gl.RGBA, gl.UNSIGNED_BYTE, pixelData);
+
+                                const imgData = outCtx.createImageData(tw, th);
+                                const rowLen = tw * 4;
+                                // Invert Y row order from WebGL framebuffer
+                                for (let r = 0; r < th; r++) {
+                                    imgData.data.set(
+                                        pixelData.subarray((th - 1 - r) * rowLen, (th - r) * rowLen),
+                                        r * rowLen
+                                    );
+                                }
+                                outCtx.putImageData(imgData, x, y);
+
+                                processedTiles++;
+                                if (onProgress) {
+                                    onProgress(Math.round((processedTiles / totalTiles) * 100));
+                                }
+                                await step();
+                            }
+                        }
+
+                        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+                        gl.deleteFramebuffer(fbo);
+                        gl.deleteTexture(renderTex);
+
+                        // High quality 93% JPEG matching realista.py
+                        outCanvas.toBlob(blob => {
+                            if (blob) resolve(blob);
+                            else reject(new Error("Falha na geração do arquivo JPEG."));
+                        }, "image/jpeg", 0.93);
+                    } catch (e) {
+                        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+                        gl.deleteFramebuffer(fbo);
+                        gl.deleteTexture(renderTex);
+                        reject(e);
+                    }
+                });
+            }
+        }
+
+        window.addEventListener("DOMContentLoaded", () => {
+            window.app = new RealisticApp();
+        });
+    </script>
+</body>
+</html>

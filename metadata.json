@@ -1,0 +1,6 @@
+{
+  "name": "Pi-ctures",
+  "description": "Processador fotográfico minimalista com visual iPhone, Smart HDR, WebGL2 e upscale Lanczos até 4x.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
